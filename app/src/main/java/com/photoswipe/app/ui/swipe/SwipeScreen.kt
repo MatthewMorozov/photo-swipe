@@ -80,6 +80,18 @@ private fun detectSwipeDirection(offsetX: Float, offsetY: Float, threshold: Floa
     }
 }
 
+private fun oppositeOf(direction: SwipeDirection?): SwipeDirection? = when (direction) {
+    SwipeDirection.LEFT -> SwipeDirection.RIGHT
+    SwipeDirection.RIGHT -> SwipeDirection.LEFT
+    SwipeDirection.UP -> SwipeDirection.DOWN
+    SwipeDirection.DOWN -> SwipeDirection.UP
+    SwipeDirection.UP_LEFT -> SwipeDirection.DOWN_RIGHT
+    SwipeDirection.UP_RIGHT -> SwipeDirection.DOWN_LEFT
+    SwipeDirection.DOWN_LEFT -> SwipeDirection.UP_RIGHT
+    SwipeDirection.DOWN_RIGHT -> SwipeDirection.UP_LEFT
+    null -> null
+}
+
 @Composable
 fun SwipeScreen(
     config: FolderConfig,
@@ -114,6 +126,7 @@ fun SwipeScreen(
                     currentIndex = state.currentIndex,
                     totalCount = state.photos.size,
                     hasUndo = state.lastAction != null,
+                    lastActionDirection = state.lastAction?.direction,
                     onSwipe = { dir -> vm.swipePhoto(dir) },
                     onUndo = { vm.undoLastAction() },
                     onBack = onDone
@@ -146,6 +159,7 @@ private fun PhotoSwipeContent(
     currentIndex: Int,
     totalCount: Int,
     hasUndo: Boolean,
+    lastActionDirection: SwipeDirection?,
     onSwipe: (SwipeDirection) -> Unit,
     onUndo: () -> Unit,
     onBack: () -> Unit
@@ -162,6 +176,9 @@ private fun PhotoSwipeContent(
     val threshold = with(density) { 120.dp.toPx() }
     // How far to fly off screen
     val flyDistance = with(density) { 600.dp.toPx() }
+
+    // Swiping in the opposite direction of the last action undoes it
+    val undoDirection: SwipeDirection? = if (hasUndo) oppositeOf(lastActionDirection) else null
 
     // Active drag direction for overlay highlights
     val activeDrag: SwipeDirection? = detectSwipeDirection(offsetX, offsetY, threshold / 2)
@@ -182,6 +199,17 @@ private fun PhotoSwipeContent(
                 label = dest.name,
                 isActive = activeDrag == direction,
                 modifier = Modifier.fillMaxSize()
+            )
+        }
+        // Undo overlay — shown when dragging opposite to the last moved photo
+        if (undoDirection != null) {
+            DirectionOverlay(
+                direction = undoDirection,
+                label = "Undo",
+                isActive = activeDrag == undoDirection,
+                modifier = Modifier.fillMaxSize(),
+                overlayColor = Color(0xFFB0BEC5),
+                labelIcon = Icons.Default.Undo
             )
         }
 
@@ -250,26 +278,30 @@ private fun PhotoSwipeContent(
                             onDragEnd = {
                                 val dominant = detectSwipeDirection(offsetX, offsetY, threshold)
 
-                                if (dominant != null && config.destinations.containsKey(dominant)) {
-                                    // Fly off screen
+                                fun flyOff(dir: SwipeDirection, then: () -> Unit) {
                                     scope.launch {
-                                        val targetX = when (dominant) {
+                                        val targetX = when (dir) {
                                             SwipeDirection.LEFT, SwipeDirection.UP_LEFT, SwipeDirection.DOWN_LEFT -> -flyDistance
                                             SwipeDirection.RIGHT, SwipeDirection.UP_RIGHT, SwipeDirection.DOWN_RIGHT -> flyDistance
                                             else -> animOffsetX.value
                                         }
-                                        val targetY = when (dominant) {
+                                        val targetY = when (dir) {
                                             SwipeDirection.UP, SwipeDirection.UP_LEFT, SwipeDirection.UP_RIGHT -> -flyDistance
                                             SwipeDirection.DOWN, SwipeDirection.DOWN_LEFT, SwipeDirection.DOWN_RIGHT -> flyDistance
                                             else -> animOffsetY.value
                                         }
                                         launch { animOffsetX.animateTo(targetX, tween(200)) }
                                         animOffsetY.animateTo(targetY, tween(200))
-                                        onSwipe(dominant)
+                                        then()
                                     }
-                                } else {
-                                    // Snap back
-                                    scope.launch {
+                                }
+
+                                when {
+                                    dominant != null && dominant == undoDirection ->
+                                        flyOff(dominant) { onUndo() }
+                                    dominant != null && config.destinations.containsKey(dominant) ->
+                                        flyOff(dominant) { onSwipe(dominant) }
+                                    else -> scope.launch {
                                         launch { animOffsetX.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
                                         animOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
                                     }
@@ -340,14 +372,16 @@ private fun DirectionOverlay(
     direction: SwipeDirection,
     label: String,
     isActive: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    overlayColor: Color = directionColors[direction] ?: Color.Gray,
+    labelIcon: ImageVector = directionIcons[direction] ?: Icons.Default.ArrowForward
 ) {
     val alpha by animateFloatAsState(
         targetValue = if (isActive) 0.35f else 0f,
         animationSpec = tween(150),
         label = "overlay_alpha"
     )
-    val color = directionColors[direction] ?: Color.Gray
+    val color = overlayColor
 
     Box(modifier = modifier) {
         // Gradient overlay from the direction edge
@@ -402,7 +436,7 @@ private fun DirectionOverlay(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Icon(
-                    imageVector = directionIcons[direction] ?: Icons.Default.ArrowForward,
+                    imageVector = labelIcon,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(36.dp)
