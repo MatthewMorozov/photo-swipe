@@ -35,20 +35,50 @@ import com.photoswipe.app.model.SwipeDirection
 import com.photoswipe.app.viewmodel.SwipeViewModel
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.sqrt
+import androidx.compose.ui.geometry.Offset
 
 private val directionColors = mapOf(
     SwipeDirection.UP to Color(0xFF81C784),
     SwipeDirection.DOWN to Color(0xFF64B5F6),
     SwipeDirection.LEFT to Color(0xFFFFB74D),
-    SwipeDirection.RIGHT to Color(0xFFCE93D8)
+    SwipeDirection.RIGHT to Color(0xFFCE93D8),
+    SwipeDirection.UP_LEFT to Color(0xFFDCE775),
+    SwipeDirection.UP_RIGHT to Color(0xFF4DB6AC),
+    SwipeDirection.DOWN_LEFT to Color(0xFFFFD54F),
+    SwipeDirection.DOWN_RIGHT to Color(0xFF4DD0E1)
 )
 
 private val directionIcons = mapOf(
     SwipeDirection.UP to Icons.Default.ArrowUpward,
     SwipeDirection.DOWN to Icons.Default.ArrowDownward,
     SwipeDirection.LEFT to Icons.Default.ArrowBack,
-    SwipeDirection.RIGHT to Icons.Default.ArrowForward
+    SwipeDirection.RIGHT to Icons.Default.ArrowForward,
+    SwipeDirection.UP_LEFT to Icons.Default.NorthWest,
+    SwipeDirection.UP_RIGHT to Icons.Default.NorthEast,
+    SwipeDirection.DOWN_LEFT to Icons.Default.SouthWest,
+    SwipeDirection.DOWN_RIGHT to Icons.Default.SouthEast
 )
+
+/**
+ * Detects which of 8 swipe directions is dominant when drag magnitude exceeds [threshold].
+ * Uses 45° sectors: cardinal directions occupy a 90° sector centred on their axis;
+ * diagonals fill the 45° gaps between cardinals.
+ */
+private fun detectSwipeDirection(offsetX: Float, offsetY: Float, threshold: Float): SwipeDirection? {
+    val magnitude = sqrt(offsetX * offsetX + offsetY * offsetY)
+    if (magnitude < threshold) return null
+    // tan(67.5°) ≈ 2.414 separates cardinal (>2.414) from diagonal sectors
+    val ratio = if (abs(offsetY) > 0f) abs(offsetX) / abs(offsetY) else Float.MAX_VALUE
+    return when {
+        ratio > 2.414f -> if (offsetX > 0) SwipeDirection.RIGHT else SwipeDirection.LEFT
+        ratio < 0.414f -> if (offsetY > 0) SwipeDirection.DOWN else SwipeDirection.UP
+        offsetX >= 0 && offsetY <= 0 -> SwipeDirection.UP_RIGHT
+        offsetX >= 0 -> SwipeDirection.DOWN_RIGHT
+        offsetY <= 0 -> SwipeDirection.UP_LEFT
+        else -> SwipeDirection.DOWN_LEFT
+    }
+}
 
 @Composable
 fun SwipeScreen(
@@ -134,13 +164,7 @@ private fun PhotoSwipeContent(
     val flyDistance = with(density) { 600.dp.toPx() }
 
     // Active drag direction for overlay highlights
-    val activeDrag: SwipeDirection? = when {
-        abs(offsetX) > abs(offsetY) && abs(offsetX) > threshold / 2 ->
-            if (offsetX > 0) SwipeDirection.RIGHT else SwipeDirection.LEFT
-        abs(offsetY) > threshold / 2 ->
-            if (offsetY > 0) SwipeDirection.DOWN else SwipeDirection.UP
-        else -> null
-    }
+    val activeDrag: SwipeDirection? = detectSwipeDirection(offsetX, offsetY, threshold / 2)
 
     // Reset animation when photo changes
     LaunchedEffect(currentIndex) {
@@ -224,27 +248,19 @@ private fun PhotoSwipeContent(
                     .pointerInput(currentIndex) {
                         detectDragGestures(
                             onDragEnd = {
-                                val dominant = if (abs(offsetX) > abs(offsetY)) {
-                                    if (abs(offsetX) > threshold) {
-                                        if (offsetX > 0) SwipeDirection.RIGHT else SwipeDirection.LEFT
-                                    } else null
-                                } else {
-                                    if (abs(offsetY) > threshold) {
-                                        if (offsetY > 0) SwipeDirection.DOWN else SwipeDirection.UP
-                                    } else null
-                                }
+                                val dominant = detectSwipeDirection(offsetX, offsetY, threshold)
 
                                 if (dominant != null && config.destinations.containsKey(dominant)) {
                                     // Fly off screen
                                     scope.launch {
                                         val targetX = when (dominant) {
-                                            SwipeDirection.LEFT -> -flyDistance
-                                            SwipeDirection.RIGHT -> flyDistance
+                                            SwipeDirection.LEFT, SwipeDirection.UP_LEFT, SwipeDirection.DOWN_LEFT -> -flyDistance
+                                            SwipeDirection.RIGHT, SwipeDirection.UP_RIGHT, SwipeDirection.DOWN_RIGHT -> flyDistance
                                             else -> animOffsetX.value
                                         }
                                         val targetY = when (dominant) {
-                                            SwipeDirection.UP -> -flyDistance
-                                            SwipeDirection.DOWN -> flyDistance
+                                            SwipeDirection.UP, SwipeDirection.UP_LEFT, SwipeDirection.UP_RIGHT -> -flyDistance
+                                            SwipeDirection.DOWN, SwipeDirection.DOWN_LEFT, SwipeDirection.DOWN_RIGHT -> flyDistance
                                             else -> animOffsetY.value
                                         }
                                         launch { animOffsetX.animateTo(targetX, tween(200)) }
@@ -340,6 +356,10 @@ private fun DirectionOverlay(
             SwipeDirection.RIGHT -> Brush.horizontalGradient(listOf(Color.Transparent, color))
             SwipeDirection.UP -> Brush.verticalGradient(listOf(color, Color.Transparent))
             SwipeDirection.DOWN -> Brush.verticalGradient(listOf(Color.Transparent, color))
+            SwipeDirection.UP_LEFT -> Brush.linearGradient(listOf(color, Color.Transparent), start = Offset.Zero, end = Offset(Float.MAX_VALUE, Float.MAX_VALUE))
+            SwipeDirection.UP_RIGHT -> Brush.linearGradient(listOf(color, Color.Transparent), start = Offset(Float.MAX_VALUE, 0f), end = Offset(0f, Float.MAX_VALUE))
+            SwipeDirection.DOWN_LEFT -> Brush.linearGradient(listOf(color, Color.Transparent), start = Offset(0f, Float.MAX_VALUE), end = Offset(Float.MAX_VALUE, 0f))
+            SwipeDirection.DOWN_RIGHT -> Brush.linearGradient(listOf(color, Color.Transparent), start = Offset(Float.MAX_VALUE, Float.MAX_VALUE), end = Offset.Zero)
         }
         Box(
             modifier = Modifier
@@ -354,11 +374,20 @@ private fun DirectionOverlay(
             SwipeDirection.RIGHT -> Alignment.CenterEnd
             SwipeDirection.UP -> Alignment.TopCenter
             SwipeDirection.DOWN -> Alignment.BottomCenter
+            SwipeDirection.UP_LEFT -> Alignment.TopStart
+            SwipeDirection.UP_RIGHT -> Alignment.TopEnd
+            SwipeDirection.DOWN_LEFT -> Alignment.BottomStart
+            SwipeDirection.DOWN_RIGHT -> Alignment.BottomEnd
         }
         val padding = when (direction) {
-            SwipeDirection.LEFT, SwipeDirection.RIGHT -> PaddingValues(horizontal = 20.dp)
+            SwipeDirection.LEFT -> PaddingValues(start = 20.dp)
+            SwipeDirection.RIGHT -> PaddingValues(end = 20.dp)
             SwipeDirection.UP -> PaddingValues(top = 80.dp)
             SwipeDirection.DOWN -> PaddingValues(bottom = 140.dp)
+            SwipeDirection.UP_LEFT -> PaddingValues(start = 20.dp, top = 80.dp)
+            SwipeDirection.UP_RIGHT -> PaddingValues(end = 20.dp, top = 80.dp)
+            SwipeDirection.DOWN_LEFT -> PaddingValues(start = 20.dp, bottom = 140.dp)
+            SwipeDirection.DOWN_RIGHT -> PaddingValues(end = 20.dp, bottom = 140.dp)
         }
 
         Box(
@@ -395,18 +424,31 @@ private fun DirectionHints(
     destinations: Map<SwipeDirection, com.photoswipe.app.model.DestinationFolder>,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    val ordered = listOf(
+        SwipeDirection.UP_LEFT, SwipeDirection.UP, SwipeDirection.UP_RIGHT,
+        SwipeDirection.LEFT, SwipeDirection.RIGHT,
+        SwipeDirection.DOWN_LEFT, SwipeDirection.DOWN, SwipeDirection.DOWN_RIGHT
+    ).mapNotNull { dir -> destinations[dir]?.let { dir to it } }
+    if (ordered.isEmpty()) return
+
+    Column(
         modifier = modifier.padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        listOf(SwipeDirection.LEFT, SwipeDirection.UP, SwipeDirection.DOWN, SwipeDirection.RIGHT)
-            .mapNotNull { dir -> destinations[dir]?.let { dir to it } }
-            .forEach { (direction, dest) ->
-                val color = directionColors[direction] ?: Color.Gray
-                val icon = directionIcons[direction] ?: Icons.Default.ArrowForward
-                HintChip(icon = icon, label = dest.name, color = color)
+        ordered.chunked(4).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                rowItems.forEach { (direction, dest) ->
+                    val color = directionColors[direction] ?: Color.Gray
+                    val icon = directionIcons[direction] ?: Icons.Default.ArrowForward
+                    HintChip(icon = icon, label = dest.name, color = color)
+                }
             }
+        }
     }
 }
 

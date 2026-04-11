@@ -237,25 +237,113 @@ private fun DirectionGrid(
     onPickFolder: (SwipeDirection) -> Unit,
     onClearFolder: (SwipeDirection) -> Unit
 ) {
-    val directionConfig = listOf(
-        SwipeDirection.UP to (Icons.Default.ArrowUpward to Color(0xFF81C784)),
-        SwipeDirection.DOWN to (Icons.Default.ArrowDownward to Color(0xFF64B5F6)),
-        SwipeDirection.LEFT to (Icons.Default.ArrowBack to Color(0xFFFFB74D)),
-        SwipeDirection.RIGHT to (Icons.Default.ArrowForward to Color(0xFFCE93D8))
+    // 3×3 compass layout; null = centre placeholder
+    val rows = listOf(
+        listOf(
+            Triple(SwipeDirection.UP_LEFT, Icons.Default.NorthWest, Color(0xFFDCE775)),
+            Triple(SwipeDirection.UP, Icons.Default.ArrowUpward, Color(0xFF81C784)),
+            Triple(SwipeDirection.UP_RIGHT, Icons.Default.NorthEast, Color(0xFF4DB6AC))
+        ),
+        listOf(
+            Triple(SwipeDirection.LEFT, Icons.Default.ArrowBack, Color(0xFFFFB74D)),
+            null,
+            Triple(SwipeDirection.RIGHT, Icons.Default.ArrowForward, Color(0xFFCE93D8))
+        ),
+        listOf(
+            Triple(SwipeDirection.DOWN_LEFT, Icons.Default.SouthWest, Color(0xFFFFD54F)),
+            Triple(SwipeDirection.DOWN, Icons.Default.ArrowDownward, Color(0xFF64B5F6)),
+            Triple(SwipeDirection.DOWN_RIGHT, Icons.Default.SouthEast, Color(0xFF4DD0E1))
+        )
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        directionConfig.forEach { (direction, iconAndColor) ->
-            val (icon, color) = iconAndColor
-            val dest = destinations[direction]
-            FolderPickerCard(
-                label = "Swipe ${direction.label} → tap to assign",
-                selectedName = dest?.let { "${direction.label}: ${it.name}" },
-                icon = icon,
-                tint = color,
-                onClick = { onPickFolder(direction) },
-                onClear = if (dest != null) {{ onClearFolder(direction) }} else null
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                row.forEach { item ->
+                    if (item == null) {
+                        Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                    } else {
+                        val (direction, icon, color) = item
+                        DirectionCell(
+                            direction = direction,
+                            icon = icon,
+                            color = color,
+                            dest = destinations[direction],
+                            onPick = { onPickFolder(direction) },
+                            onClear = { onClearFolder(direction) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectionCell(
+    direction: SwipeDirection,
+    icon: ImageVector,
+    color: Color,
+    dest: DestinationFolder?,
+    onPick: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(
+                width = 1.dp,
+                color = if (dest != null) color.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(12.dp)
             )
+            .clickable(onClick = onPick)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (dest != null) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = dest?.name ?: direction.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (dest != null) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+        if (dest != null) {
+            IconButton(
+                onClick = onClear,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(28.dp)
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Clear ${direction.label}",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
     }
 }

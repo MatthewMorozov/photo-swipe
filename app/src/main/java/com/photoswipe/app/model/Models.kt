@@ -6,7 +6,11 @@ enum class SwipeDirection(val label: String) {
     LEFT("Left"),
     RIGHT("Right"),
     UP("Up"),
-    DOWN("Down")
+    DOWN("Down"),
+    UP_LEFT("Up-Left"),
+    UP_RIGHT("Up-Right"),
+    DOWN_LEFT("Down-Left"),
+    DOWN_RIGHT("Down-Right")
 }
 
 data class FolderConfig(
