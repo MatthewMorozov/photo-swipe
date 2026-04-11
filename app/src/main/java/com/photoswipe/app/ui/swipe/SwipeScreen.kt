@@ -171,6 +171,8 @@ private fun PhotoSwipeContent(
     var offsetY by remember { mutableFloatStateOf(0f) }
     val animOffsetX = remember { Animatable(0f) }
     val animOffsetY = remember { Animatable(0f) }
+    // True only when the current drag started in the edge zone of the last-moved direction
+    var isEdgeStartForUndo by remember { mutableStateOf(false) }
 
     // How far to drag before triggering (in pixels)
     val threshold = with(density) { 120.dp.toPx() }
@@ -189,6 +191,7 @@ private fun PhotoSwipeContent(
         animOffsetY.snapTo(0f)
         offsetX = 0f
         offsetY = 0f
+        isEdgeStartForUndo = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -201,8 +204,8 @@ private fun PhotoSwipeContent(
                 modifier = Modifier.fillMaxSize()
             )
         }
-        // Undo overlay — shown when dragging opposite to the last moved photo
-        if (undoDirection != null) {
+        // Undo overlay — shown only when drag started in the edge zone of the last action
+        if (undoDirection != null && isEdgeStartForUndo) {
             DirectionOverlay(
                 direction = undoDirection,
                 label = "Undo",
@@ -274,7 +277,27 @@ private fun PhotoSwipeContent(
                         rotationZ = rotation
                     }
                     .pointerInput(currentIndex) {
+                        val cardW = size.width.toFloat()
+                        val cardH = size.height.toFloat()
                         detectDragGestures(
+                            onDragStart = { offset ->
+                                // Detect if this drag starts in the outer third of the card
+                                // on the side where the last photo was sent (the undo edge zone).
+                                isEdgeStartForUndo = undoDirection != null && run {
+                                    val e = 0.33f
+                                    when (lastActionDirection) {
+                                        SwipeDirection.RIGHT      -> offset.x > cardW * (1f - e)
+                                        SwipeDirection.LEFT       -> offset.x < cardW * e
+                                        SwipeDirection.DOWN       -> offset.y > cardH * (1f - e)
+                                        SwipeDirection.UP         -> offset.y < cardH * e
+                                        SwipeDirection.UP_RIGHT   -> offset.x > cardW * (1f - e) && offset.y < cardH * e
+                                        SwipeDirection.UP_LEFT    -> offset.x < cardW * e && offset.y < cardH * e
+                                        SwipeDirection.DOWN_RIGHT -> offset.x > cardW * (1f - e) && offset.y > cardH * (1f - e)
+                                        SwipeDirection.DOWN_LEFT  -> offset.x < cardW * e && offset.y > cardH * (1f - e)
+                                        null -> false
+                                    }
+                                }
+                            },
                             onDragEnd = {
                                 val dominant = detectSwipeDirection(offsetX, offsetY, threshold)
 
@@ -297,7 +320,8 @@ private fun PhotoSwipeContent(
                                 }
 
                                 when {
-                                    dominant != null && dominant == undoDirection ->
+                                    // Undo: started in edge zone AND swiped back toward center
+                                    dominant != null && dominant == undoDirection && isEdgeStartForUndo ->
                                         flyOff(dominant) { onUndo() }
                                     dominant != null && config.destinations.containsKey(dominant) ->
                                         flyOff(dominant) { onSwipe(dominant) }
@@ -306,6 +330,7 @@ private fun PhotoSwipeContent(
                                         animOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
                                     }
                                 }
+                                isEdgeStartForUndo = false
                                 offsetX = 0f
                                 offsetY = 0f
                             },
@@ -314,6 +339,7 @@ private fun PhotoSwipeContent(
                                     launch { animOffsetX.animateTo(0f, spring()) }
                                     animOffsetY.animateTo(0f, spring())
                                 }
+                                isEdgeStartForUndo = false
                                 offsetX = 0f
                                 offsetY = 0f
                             },
