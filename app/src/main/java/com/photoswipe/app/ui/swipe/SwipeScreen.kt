@@ -92,6 +92,17 @@ private fun oppositeOf(direction: SwipeDirection?): SwipeDirection? = when (dire
     null -> null
 }
 
+private fun directionToOffset(dir: SwipeDirection, distance: Float): Pair<Float, Float> = when (dir) {
+    SwipeDirection.LEFT -> -distance to 0f
+    SwipeDirection.RIGHT -> distance to 0f
+    SwipeDirection.UP -> 0f to -distance
+    SwipeDirection.DOWN -> 0f to distance
+    SwipeDirection.UP_LEFT -> -distance to -distance
+    SwipeDirection.UP_RIGHT -> distance to -distance
+    SwipeDirection.DOWN_LEFT -> -distance to distance
+    SwipeDirection.DOWN_RIGHT -> distance to distance
+}
+
 @Composable
 fun SwipeScreen(
     config: FolderConfig,
@@ -173,6 +184,8 @@ private fun PhotoSwipeContent(
     val animOffsetY = remember { Animatable(0f) }
     // True only when the current drag started in the edge zone of the last-moved direction
     var isEdgeStartForUndo by remember { mutableStateOf(false) }
+    // When non-null, the next photo should slide in from this direction (used for undo)
+    var enterFromDirection by remember { mutableStateOf<SwipeDirection?>(null) }
 
     // How far to drag before triggering (in pixels)
     val threshold = with(density) { 120.dp.toPx() }
@@ -185,10 +198,19 @@ private fun PhotoSwipeContent(
     // Active drag direction for overlay highlights
     val activeDrag: SwipeDirection? = detectSwipeDirection(offsetX, offsetY, threshold / 2)
 
-    // Reset animation when photo changes
+    // Reset animation when photo changes. If enterFromDirection is set, the offsets
+    // were already snapped to the entrance position before this fires — animate them back
+    // to center so the photo slides in from the direction it was originally sent.
     LaunchedEffect(currentIndex) {
-        animOffsetX.snapTo(0f)
-        animOffsetY.snapTo(0f)
+        val enterDir = enterFromDirection
+        if (enterDir != null) {
+            enterFromDirection = null
+            launch { animOffsetX.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+            animOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+        } else {
+            animOffsetX.snapTo(0f)
+            animOffsetY.snapTo(0f)
+        }
         offsetX = 0f
         offsetY = 0f
         isEdgeStartForUndo = false
@@ -238,7 +260,18 @@ private fun PhotoSwipeContent(
             )
             Spacer(modifier = Modifier.weight(1f))
             if (hasUndo) {
-                IconButton(onClick = onUndo) {
+                IconButton(onClick = {
+                    val dir = lastActionDirection
+                    scope.launch {
+                        if (dir != null) {
+                            val (tx, ty) = directionToOffset(dir, flyDistance)
+                            launch { animOffsetX.animateTo(tx, tween(180)) }
+                            animOffsetY.animateTo(ty, tween(180))
+                            enterFromDirection = dir
+                        }
+                        onUndo()
+                    }
+                }) {
                     Icon(
                         Icons.Default.Undo,
                         contentDescription = "Undo",
@@ -301,7 +334,7 @@ private fun PhotoSwipeContent(
                             onDragEnd = {
                                 val dominant = detectSwipeDirection(offsetX, offsetY, threshold)
 
-                                fun flyOff(dir: SwipeDirection, then: () -> Unit) {
+                                fun flyOff(dir: SwipeDirection, then: suspend () -> Unit) {
                                     scope.launch {
                                         val targetX = when (dir) {
                                             SwipeDirection.LEFT, SwipeDirection.UP_LEFT, SwipeDirection.DOWN_LEFT -> -flyDistance
@@ -322,7 +355,16 @@ private fun PhotoSwipeContent(
                                 when {
                                     // Undo: started in edge zone AND swiped back toward center
                                     dominant != null && dominant == undoDirection && isEdgeStartForUndo ->
-                                        flyOff(dominant) { onUndo() }
+                                        flyOff(dominant) {
+                                            val capturedDir = lastActionDirection
+                                            if (capturedDir != null) {
+                                                enterFromDirection = capturedDir
+                                                val (sx, sy) = directionToOffset(capturedDir, flyDistance)
+                                                animOffsetX.snapTo(sx)
+                                                animOffsetY.snapTo(sy)
+                                            }
+                                            onUndo()
+                                        }
                                     dominant != null && config.destinations.containsKey(dominant) ->
                                         flyOff(dominant) { onSwipe(dominant) }
                                     else -> scope.launch {

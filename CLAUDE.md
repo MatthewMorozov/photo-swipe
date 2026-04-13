@@ -47,3 +47,55 @@ Defined in `gradle/libs.versions.toml`. Key libraries:
 - `androidx.documentfile` for SAF tree navigation
 - Material 3 + `material-icons-extended`
 - No networking libraries — app is fully offline
+
+## Local build environment (Windows, this machine)
+
+The repo is **missing the Gradle wrapper files** — there is no `gradlew`, `gradlew.bat`, or `gradle/wrapper/gradle-wrapper.jar`. Only `gradle/wrapper/gradle-wrapper.properties` exists. Running `./gradlew` or `gradlew.bat` will fail with "not recognized". Must either install Gradle directly or generate the wrapper via `gradle wrapper`.
+
+**Current wrapper target:** `gradle-8.7-bin.zip`. Gradle 8.7 does **not** support JDK 25 (needs Gradle 9.1+). Current toolchain pins:
+- AGP `8.5.2` (libs.versions.toml) — constrains max Gradle to ~8.11
+- Kotlin `2.0.21`
+- JDK 25.0.2 is the only JDK installed on this machine (via `winget install Microsoft.OpenJDK.17`, which resolves to newest — got 25, not 17)
+
+User preference: use a more recent Gradle than 8.7. Pending decision — either Gradle 8.14.x (may not work with JDK 25), or install JDK 21 (LTS) alongside.
+
+**Environment variables already set (User scope):**
+- `JAVA_HOME` = `C:\Program Files\Microsoft\jdk-25.0.2.10-hotspot`
+- `ANDROID_HOME` = `C:\Users\MiniPC\.android` (user preference: install under `~/.android`, not `C:\Android`)
+
+**Android SDK installed under `%USERPROFILE%\.android\`:**
+- `cmdline-tools/latest` (from `commandlinetools-win-11076708_latest.zip`)
+- `platform-tools`
+- `build-tools;35.0.0`
+- `platforms;android-35`
+- All SDK licenses accepted
+
+**PowerShell quirk on this machine:** fresh PowerShell sessions do not always inherit an updated PATH from the registry. To rehydrate PATH in a session before running `java`, `sdkmanager`, etc., use:
+```powershell
+$machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+$userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+$env:PATH = "$machinePath;$userPath"
+```
+
+Bash (Git Bash) is also available in this environment and was used for basic file listing; prefer PowerShell for build-related work so env vars behave as expected.
+
+## In-progress work (resumable)
+
+**SwipeScreen entrance animation for undo** — edits applied to `app/src/main/java/com/photoswipe/app/ui/swipe/SwipeScreen.kt` but **not yet compiled/verified** because the build environment isn't ready (see above).
+
+Goal: when the user undoes a swipe (via the edge-drag gesture or the toolbar undo button), the recovered photo should slide in from the direction it was originally sent — so it feels like you're physically pulling the photo back — instead of just appearing at center.
+
+Implementation summary:
+- New file-level helper `directionToOffset(dir, distance)` → `(Pair<Float, Float>)` mapping each `SwipeDirection` to a card translation offset at the given fly distance.
+- New compose state `var enterFromDirection by remember { mutableStateOf<SwipeDirection?>(null) }` inside `PhotoSwipeContent`.
+- `LaunchedEffect(currentIndex)` branches: if `enterFromDirection` is non-null, it clears the flag and animates `animOffsetX`/`animOffsetY` from their current position (which the caller pre-snapped to the entrance position) back to `0f` with `spring(stiffness = Spring.StiffnessMediumLow)`. Otherwise snaps to 0 as before.
+- `flyOff`'s `then` callback changed from `() -> Unit` to `suspend () -> Unit` so `animOffsetX.snapTo(...)` can run before `onUndo()` inside the callback.
+- Gesture-based undo path (`dominant == undoDirection && isEdgeStartForUndo`): after the fly-off animation completes, captures `lastActionDirection`, sets `enterFromDirection`, snaps offsets to `directionToOffset(capturedDir, flyDistance)`, then calls `onUndo()`.
+- Toolbar undo button: replaced the direct `onClick = onUndo` with a `scope.launch { ... }` block that animates the current photo off toward `lastActionDirection` with `tween(180)`, sets `enterFromDirection`, then calls `onUndo()` — giving the button-based undo the same "physical return" feel as the gesture-based one.
+
+Things to verify once the build works:
+1. App compiles (`assembleDebug`).
+2. Gesture undo: recovered photo slides in from the original swipe direction, not just appears.
+3. Button undo: current photo flies off toward `lastActionDirection` and the recovered photo then slides back in from that same direction.
+4. Normal forward swipes still work (new photo appears at center instantly, no entrance animation).
+5. No visible "flash" frame where the new photo briefly renders at (0,0) before the entrance animation kicks in — the coroutine ordering is supposed to prevent this by snapping offsets before calling `onUndo()`.
