@@ -14,11 +14,9 @@
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M44,60 L52,48 L60,56 L64,52 L74,62 L74,74 Q74,78 70,78 L38,78 Q34,78 34,74 L34,62 Z" />
-    <circle
+    <path
         android:fillColor="#FFFFFF"
-        android:cx="46"
-        android:cy="44"
-        android:r="4" />
+        android:pathData="M46,44 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
     <!-- Arrows -->
     <path
         android:fillColor="#FFFFFF"
