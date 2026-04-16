@@ -16,13 +16,24 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(project.findProperty("keystore.path") as String? ?: "./keys/release.jks")
+            storePassword = project.findProperty("keystore.password") as String? ?: ""
+            keyAlias = project.findProperty("key.alias") as String? ?: "photoswipe"
+            keyPassword = project.findProperty("key.password") as String? ?: ""
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
