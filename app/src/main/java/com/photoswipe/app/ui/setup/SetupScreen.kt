@@ -100,26 +100,17 @@ fun SetupScreen(onStart: (FolderConfig) -> Unit) {
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
         )
 
-        // Source folder
-        SectionHeader("Source Folder")
-        FolderPickerCard(
-            label = "Choose source folder",
-            selectedName = sourceName.ifEmpty { null },
-            icon = Icons.Default.FolderOpen,
-            tint = MaterialTheme.colorScheme.primary,
-            onClick = { sourceLauncher.launch(null) }
-        )
-
-        // Destination folders
-        SectionHeader("Destination Folders")
+        SectionHeader("Folder Setup")
         Text(
-            text = "Assign at least one folder to a swipe direction.",
+            text = "Tap the center to set your source folder. Assign destinations to swipe directions.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
         )
 
         DirectionGrid(
             destinations = destinations,
+            sourceName = sourceName.ifEmpty { null },
+            onPickSource = { sourceLauncher.launch(null) },
             onPickFolder = { direction ->
                 pickingFor = direction
                 destLauncher.launch(null)
@@ -234,10 +225,11 @@ private fun FolderPickerCard(
 @Composable
 private fun DirectionGrid(
     destinations: Map<SwipeDirection, DestinationFolder>,
+    sourceName: String?,
+    onPickSource: () -> Unit,
     onPickFolder: (SwipeDirection) -> Unit,
     onClearFolder: (SwipeDirection) -> Unit
 ) {
-    // 3×3 compass layout; null = centre placeholder
     val rows = listOf(
         listOf(
             Triple(SwipeDirection.UP_LEFT, Icons.Default.NorthWest, Color(0xFFDCE775)),
@@ -264,7 +256,11 @@ private fun DirectionGrid(
             ) {
                 row.forEach { item ->
                     if (item == null) {
-                        Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                        SourceCell(
+                            sourceName = sourceName,
+                            onPick = onPickSource,
+                            modifier = Modifier.weight(1f)
+                        )
                     } else {
                         val (direction, icon, color) = item
                         DirectionCell(
@@ -279,6 +275,55 @@ private fun DirectionGrid(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SourceCell(
+    sourceName: String?,
+    onPick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val color = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (sourceName != null) color.copy(alpha = 0.12f)
+                else MaterialTheme.colorScheme.surface
+            )
+            .border(
+                width = if (sourceName != null) 2.dp else 1.dp,
+                color = if (sourceName != null) color
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onPick),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.FolderOpen,
+                contentDescription = null,
+                tint = if (sourceName != null) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = sourceName ?: "Source",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (sourceName != null) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (sourceName != null) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
