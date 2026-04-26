@@ -28,18 +28,21 @@ import androidx.documentfile.provider.DocumentFile
 import com.photoswipe.app.model.DestinationFolder
 import com.photoswipe.app.model.FolderConfig
 import com.photoswipe.app.model.SwipeDirection
+import com.photoswipe.app.storage.SafStorage
+import com.photoswipe.app.storage.Storage
+
+private data class PickedDestination(val uri: Uri, val name: String)
 
 @Composable
-fun SetupScreen(onStart: (FolderConfig) -> Unit) {
+fun SetupScreen(onStart: (Storage) -> Unit) {
     val context = LocalContext.current
 
     var sourceUri by remember { mutableStateOf<Uri?>(null) }
     var sourceName by remember { mutableStateOf("") }
     var destinations by remember {
-        mutableStateOf(mapOf<SwipeDirection, DestinationFolder>())
+        mutableStateOf(mapOf<SwipeDirection, PickedDestination>())
     }
 
-    // Tracks which direction we're currently picking a folder for
     var pickingFor by remember { mutableStateOf<SwipeDirection?>(null) }
 
     val sourceLauncher = rememberLauncherForActivityResult(
@@ -69,7 +72,7 @@ fun SetupScreen(onStart: (FolderConfig) -> Unit) {
                 ?: treeUri.lastPathSegment
                 ?: "Selected folder"
             pickingFor?.let { direction ->
-                destinations = destinations + (direction to DestinationFolder(treeUri, name))
+                destinations = destinations + (direction to PickedDestination(treeUri, name))
             }
         }
         pickingFor = null
@@ -100,7 +103,12 @@ fun SetupScreen(onStart: (FolderConfig) -> Unit) {
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
         )
 
-        SectionHeader("Folder Setup")
+        Text(
+            text = "Folder Setup",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
         Text(
             text = "Tap the center to set your source folder. Assign destinations to swipe directions.",
             style = MaterialTheme.typography.bodySmall,
@@ -126,7 +134,17 @@ fun SetupScreen(onStart: (FolderConfig) -> Unit) {
             onClick = {
                 val src = sourceUri ?: return@Button
                 val name = sourceName
-                onStart(FolderConfig(src, name, destinations))
+                val config = FolderConfig(
+                    sourceName = name,
+                    destinations = destinations.mapValues { DestinationFolder(it.value.name) }
+                )
+                val storage = SafStorage(
+                    context = context.applicationContext,
+                    config = config,
+                    sourceUri = src,
+                    destinationUris = destinations.mapValues { it.value.uri }
+                )
+                onStart(storage)
             },
             enabled = canStart,
             modifier = Modifier
@@ -142,89 +160,8 @@ fun SetupScreen(onStart: (FolderConfig) -> Unit) {
 }
 
 @Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onBackground
-    )
-}
-
-@Composable
-private fun FolderPickerCard(
-    label: String,
-    selectedName: String?,
-    icon: ImageVector,
-    tint: Color,
-    onClick: () -> Unit,
-    onClear: (() -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(
-                width = 1.dp,
-                color = if (selectedName != null) tint.copy(alpha = 0.5f)
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (selectedName != null) tint else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-            modifier = Modifier.size(24.dp)
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            if (selectedName != null) {
-                Text(
-                    text = selectedName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            } else {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                )
-            }
-        }
-        if (selectedName != null && onClear != null) {
-            IconButton(
-                onClick = onClear,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Clear",
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        } else {
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
 private fun DirectionGrid(
-    destinations: Map<SwipeDirection, DestinationFolder>,
+    destinations: Map<SwipeDirection, PickedDestination>,
     sourceName: String?,
     onPickSource: () -> Unit,
     onPickFolder: (SwipeDirection) -> Unit,
@@ -267,7 +204,7 @@ private fun DirectionGrid(
                             direction = direction,
                             icon = icon,
                             color = color,
-                            dest = destinations[direction],
+                            destName = destinations[direction]?.name,
                             onPick = { onPickFolder(direction) },
                             onClear = { onClearFolder(direction) },
                             modifier = Modifier.weight(1f)
@@ -333,7 +270,7 @@ private fun DirectionCell(
     direction: SwipeDirection,
     icon: ImageVector,
     color: Color,
-    dest: DestinationFolder?,
+    destName: String?,
     onPick: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier
@@ -345,7 +282,7 @@ private fun DirectionCell(
             .background(MaterialTheme.colorScheme.surface)
             .border(
                 width = 1.dp,
-                color = if (dest != null) color.copy(alpha = 0.5f)
+                color = if (destName != null) color.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
                 shape = RoundedCornerShape(12.dp)
             )
@@ -361,21 +298,21 @@ private fun DirectionCell(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (dest != null) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                tint = if (destName != null) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = dest?.name ?: direction.label,
+                text = destName ?: direction.label,
                 style = MaterialTheme.typography.labelSmall,
-                color = if (dest != null) MaterialTheme.colorScheme.onSurface
+                color = if (destName != null) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
             )
         }
-        if (dest != null) {
+        if (destName != null) {
             IconButton(
                 onClick = onClear,
                 modifier = Modifier

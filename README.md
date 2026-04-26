@@ -1,6 +1,10 @@
 # Photo Swipe
 
-An Android app for quickly sorting photos into folders using swipe gestures. Pick a source folder, assign up to four destination folders to swipe directions, then swipe through your photos one by one to move them where you want.
+A Kotlin Multiplatform app for quickly sorting photos into folders using swipe gestures. Pick a source folder, assign up to four destination folders to swipe directions, then swipe through your photos one by one to move them where you want.
+
+Targets:
+- **Android** (full app, with Storage Access Framework folder pickers)
+- **Browser via wasmJs** (interaction-only demo with procedurally generated images and in-memory "moves")
 
 ## Features
 
@@ -190,6 +194,52 @@ adb -s <device-serial> install app/build/outputs/apk/debug/app-debug.apk
 
 ---
 
+---
+
+## Building the Web Demo (wasmJs)
+
+The web build shares all UI and view-model code with the Android app via a `Storage` interface; the browser version uses a `MockStorage` that generates colorful gradient images and tracks "moves" in memory only — no real files are touched.
+
+### Requirements
+
+- **JDK 17+** (this project has been verified to work on JDK 25 with Gradle 9.1)
+- A modern browser (the build targets Wasm GC, so Chrome/Edge 119+, Firefox 120+, or Safari 18.2+)
+
+### Build the production bundle
+
+```
+./gradlew :app:wasmJsBrowserDistribution          # macOS / Linux
+gradlew.bat :app:wasmJsBrowserDistribution        # Windows
+```
+
+Output: `app/build/dist/wasmJs/productionExecutable/` — contains `index.html`, `photoswipe.js`, and the `.wasm` files.
+
+### Run it
+
+The wasm files won't load over `file://` — they need an HTTP server. Two options:
+
+**Option 1 — Gradle dev server** (rebuilds on change, opens browser automatically):
+```
+./gradlew :app:wasmJsBrowserDevelopmentRun
+```
+
+**Option 2 — Serve the production bundle with any static server**, e.g. Python:
+```
+cd app/build/dist/wasmJs/productionExecutable
+python -m http.server 8000
+```
+Then open http://localhost:8000/.
+
+### What the demo does
+
+- Click **Start Demo** to enter the swipe screen
+- Drag photos in 4 directions: → Keep, ← Trash, ↑ Favorites, ↓ Later
+- Swipe is animated with the same gesture/animation code the Android app uses
+- Undo button restores the previous photo with the same "fly back" entrance animation
+- "Moves" are tracked in memory only — refresh to reset
+
+---
+
 ## Signing
 
 The debug build is automatically signed with a debug keystore and can be installed on any device with **USB debugging** or **unknown sources** enabled. It cannot be published to the Play Store.
@@ -245,17 +295,27 @@ Folder access is granted via the system folder picker (Storage Access Framework)
 ```
 photo-swipe/
 ├── app/
-│   └── src/main/
-│       ├── java/com/photoswipe/app/
-│       │   ├── MainActivity.kt              # Entry point, screen routing
-│       │   ├── model/Models.kt              # Data classes and enums
-│       │   ├── viewmodel/SwipeViewModel.kt  # Photo loading and file move logic
+│   └── src/
+│       ├── commonMain/kotlin/com/photoswipe/app/
+│       │   ├── model/Models.kt              # FolderConfig, PhotoItem, SwipeDirection
+│       │   ├── storage/Storage.kt           # Platform-agnostic storage interface
+│       │   ├── viewmodel/SwipeViewModel.kt  # State machine; depends on Storage
 │       │   └── ui/
-│       │       ├── setup/SetupScreen.kt     # Folder configuration screen
-│       │       ├── swipe/SwipeScreen.kt     # Swipe interaction screen
+│       │       ├── swipe/SwipeScreen.kt     # Shared swipe UI (Compose Multiplatform)
 │       │       └── theme/Theme.kt           # Material 3 dark theme
-│       ├── res/
-│       └── AndroidManifest.xml
+│       ├── androidMain/
+│       │   ├── kotlin/com/photoswipe/app/
+│       │   │   ├── MainActivity.kt          # Android entry point
+│       │   │   ├── storage/SafStorage.kt    # SAF-backed Storage impl
+│       │   │   └── ui/setup/SetupScreen.kt  # Folder picker (OpenDocumentTree)
+│       │   ├── res/
+│       │   └── AndroidManifest.xml
+│       └── wasmJsMain/
+│           ├── kotlin/com/photoswipe/app/
+│           │   ├── Main.kt                  # ComposeViewport entry
+│           │   ├── storage/MockStorage.kt   # Procedural images, in-memory moves
+│           │   └── ui/setup/SetupScreen.kt  # Simple Start Demo button
+│           └── resources/index.html
 ├── gradle/
 │   ├── libs.versions.toml                   # Dependency version catalog
 │   └── wrapper/gradle-wrapper.properties
