@@ -6,7 +6,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -15,18 +14,17 @@ import com.photoswipe.app.model.FolderConfig
 import com.photoswipe.app.model.PhotoItem
 import com.photoswipe.app.model.SwipeDirection
 
-class MockStorage : Storage {
+class MockStorage(
+    source: MockFolderTemplate,
+    destinations: Map<SwipeDirection, MockFolderTemplate>
+) : Storage {
     override val config: FolderConfig = FolderConfig(
-        sourceName = "Demo Photos",
-        destinations = mapOf(
-            SwipeDirection.LEFT to DestinationFolder("Trash"),
-            SwipeDirection.RIGHT to DestinationFolder("Keep"),
-            SwipeDirection.UP to DestinationFolder("Favorites"),
-            SwipeDirection.DOWN to DestinationFolder("Later"),
-        )
+        sourceName = source.name,
+        destinations = destinations.mapValues { DestinationFolder(it.value.name) }
     )
 
-    private val allPhotos: List<MockPhoto> = generateMockPhotos(15)
+    private val allPhotos: List<MockPhoto> =
+        generateMockPhotos(source.id, source.photoCount, source.palette)
     private val moved = mutableMapOf<String, SwipeDirection>()
 
     override suspend fun loadPhotos(): List<PhotoItem> =
@@ -50,25 +48,19 @@ private class MockPhoto(val id: String, val name: String, val bitmap: ImageBitma
     fun toItem() = PhotoItem(id, name, "image/png")
 }
 
-private fun generateMockPhotos(n: Int): List<MockPhoto> {
-    val palette = listOf(
-        Color(0xFFEF5350) to Color(0xFFFFCDD2),
-        Color(0xFFAB47BC) to Color(0xFFE1BEE7),
-        Color(0xFF5C6BC0) to Color(0xFFC5CAE9),
-        Color(0xFF26A69A) to Color(0xFFB2DFDB),
-        Color(0xFF66BB6A) to Color(0xFFC8E6C9),
-        Color(0xFFFFCA28) to Color(0xFFFFF9C4),
-        Color(0xFFFF7043) to Color(0xFFFFCCBC),
-        Color(0xFF8D6E63) to Color(0xFFD7CCC8),
-        Color(0xFF42A5F5) to Color(0xFFBBDEFB),
-        Color(0xFFEC407A) to Color(0xFFF8BBD0),
-    )
+private fun generateMockPhotos(
+    sourceId: String,
+    n: Int,
+    palette: List<Pair<Color, Color>>
+): List<MockPhoto> {
+    if (n == 0 || palette.isEmpty()) return emptyList()
     return (1..n).map { i ->
         val (a, b) = palette[(i - 1) % palette.size]
-        val bm = generateGradientBitmap(800, 1000, a, b, accentSeed = i)
+        val seed = sourceId.hashCode() xor (i * 7919)
+        val bm = generateGradientBitmap(800, 1000, a, b, accentSeed = seed)
         MockPhoto(
-            id = "demo-$i",
-            name = "demo_${i.toString().padStart(2, '0')}.png",
+            id = "$sourceId-$i",
+            name = "${sourceId}_${i.toString().padStart(2, '0')}.png",
             bitmap = bm
         )
     }
@@ -88,9 +80,8 @@ private fun generateGradientBitmap(w: Int, h: Int, top: Color, bottom: Color, ac
             brush = Brush.verticalGradient(listOf(top, bottom)),
             size = size
         )
-        // A few accent shapes so each photo looks visually distinct
         val rng = SimpleRng(accentSeed.toLong() * 7919L)
-        repeat(4 + (accentSeed % 3)) {
+        repeat(4 + (accentSeed.mod(3))) {
             val cx = rng.nextFloat() * w
             val cy = rng.nextFloat() * h
             val radius = 40f + rng.nextFloat() * 120f
@@ -100,12 +91,11 @@ private fun generateGradientBitmap(w: Int, h: Int, top: Color, bottom: Color, ac
                 center = Offset(cx, cy)
             )
         }
-        // Big number-like bar so the user can tell photos apart
         val barH = h / 6f
         drawRect(
             color = bottom.copy(alpha = 0.6f),
             topLeft = Offset(w * 0.1f, h * 0.45f - barH / 2f),
-            size = Size(w * 0.8f * (0.3f + (accentSeed % 7) / 10f), barH)
+            size = Size(w * 0.8f * (0.3f + accentSeed.mod(7) / 10f), barH)
         )
     }
     return bitmap

@@ -101,7 +101,7 @@ fun SwipeScreen(
     storage: Storage,
     onDone: () -> Unit
 ) {
-    val vm: SwipeViewModel = viewModel { SwipeViewModel(storage) }
+    val vm: SwipeViewModel = viewModel(key = storage.hashCode().toString()) { SwipeViewModel(storage) }
     val state by vm.state.collectAsState()
 
     val currentPhoto = state.photos.getOrNull(state.currentIndex)

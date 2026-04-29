@@ -89,3 +89,22 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 }
+
+// Copy Skiko's web runtime (skiko.wasm / skiko.mjs / skiko.js) into the
+// production browser distribution. Webpack's production bundle doesn't
+// include them by default, so the page would 404 on skiko.wasm at runtime.
+afterEvaluate {
+    tasks.named("wasmJsBrowserDistribution").configure {
+        dependsOn("wasmJsProcessResources")
+        doLast {
+            val skikoDir = layout.buildDirectory.dir("compose/skiko-for-web-runtime").get().asFile
+            val distDir = layout.buildDirectory.dir("dist/wasmJs/productionExecutable").get().asFile
+            if (skikoDir.exists() && distDir.exists()) {
+                listOf("skiko.wasm", "skiko.mjs", "skiko.js").forEach { name ->
+                    val src = skikoDir.resolve(name)
+                    if (src.exists()) src.copyTo(distDir.resolve(name), overwrite = true)
+                }
+            }
+        }
+    }
+}
