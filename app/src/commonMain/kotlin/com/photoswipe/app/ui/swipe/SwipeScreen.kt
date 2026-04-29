@@ -183,6 +183,9 @@ private fun PhotoSwipeContent(
     val activeDrag: SwipeDirection? = detectSwipeDirection(offsetX, offsetY, threshold / 2)
 
     LaunchedEffect(currentIndex) {
+        offsetX = 0f
+        offsetY = 0f
+        isEdgeStartForUndo = false
         val enterDir = enterFromDirection
         if (enterDir != null) {
             enterFromDirection = null
@@ -192,9 +195,6 @@ private fun PhotoSwipeContent(
             animOffsetX.snapTo(0f)
             animOffsetY.snapTo(0f)
         }
-        offsetX = 0f
-        offsetY = 0f
-        isEdgeStartForUndo = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -276,14 +276,14 @@ private fun PhotoSwipeContent(
                 .padding(top = 72.dp, bottom = 120.dp, start = 16.dp, end = 16.dp),
             contentAlignment = Alignment.Center
         ) {
-            val rotation = (animOffsetX.value / flyDistance) * 15f
             Card(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        translationX = animOffsetX.value
-                        translationY = animOffsetY.value
-                        rotationZ = rotation
+                        val totalX = offsetX + animOffsetX.value
+                        translationX = totalX
+                        translationY = offsetY + animOffsetY.value
+                        rotationZ = (totalX / flyDistance) * 15f
                     }
                     .pointerInput(currentIndex) {
                         val cardW = size.width.toFloat()
@@ -307,9 +307,18 @@ private fun PhotoSwipeContent(
                             },
                             onDragEnd = {
                                 val dominant = detectSwipeDirection(offsetX, offsetY, threshold)
+                                val startX = offsetX
+                                val startY = offsetY
 
                                 fun flyOff(dir: SwipeDirection, then: suspend () -> Unit) {
                                     scope.launch {
+                                        // Hand the drag offset over to the Animatable, then zero
+                                        // out the plain offset so graphicsLayer sees a smooth
+                                        // total (no jump back to 0).
+                                        animOffsetX.snapTo(startX)
+                                        animOffsetY.snapTo(startY)
+                                        offsetX = 0f
+                                        offsetY = 0f
                                         val targetX = when (dir) {
                                             SwipeDirection.LEFT, SwipeDirection.UP_LEFT, SwipeDirection.DOWN_LEFT -> -flyDistance
                                             SwipeDirection.RIGHT, SwipeDirection.UP_RIGHT, SwipeDirection.DOWN_RIGHT -> flyDistance
@@ -341,31 +350,33 @@ private fun PhotoSwipeContent(
                                     dominant != null && storage.config.destinations.containsKey(dominant) ->
                                         flyOff(dominant) { onSwipe(dominant) }
                                     else -> scope.launch {
+                                        animOffsetX.snapTo(startX)
+                                        animOffsetY.snapTo(startY)
+                                        offsetX = 0f
+                                        offsetY = 0f
                                         launch { animOffsetX.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
                                         animOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
                                     }
                                 }
                                 isEdgeStartForUndo = false
-                                offsetX = 0f
-                                offsetY = 0f
                             },
                             onDragCancel = {
+                                val startX = offsetX
+                                val startY = offsetY
                                 scope.launch {
+                                    animOffsetX.snapTo(startX)
+                                    animOffsetY.snapTo(startY)
+                                    offsetX = 0f
+                                    offsetY = 0f
                                     launch { animOffsetX.animateTo(0f, spring()) }
                                     animOffsetY.animateTo(0f, spring())
                                 }
                                 isEdgeStartForUndo = false
-                                offsetX = 0f
-                                offsetY = 0f
                             },
                             onDrag = { change, dragAmount ->
                                 change.consume()
                                 offsetX += dragAmount.x
                                 offsetY += dragAmount.y
-                                scope.launch {
-                                    animOffsetX.snapTo(animOffsetX.value + dragAmount.x)
-                                    animOffsetY.snapTo(animOffsetY.value + dragAmount.y)
-                                }
                             }
                         )
                     },

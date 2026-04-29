@@ -1,6 +1,8 @@
 package com.photoswipe.app.ui.setup
 
+import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -23,6 +25,28 @@ import com.photoswipe.app.storage.Storage
 
 private data class PickedDestination(val uri: Uri, val name: String)
 
+private fun tryTakePersistablePermission(context: Context, uri: Uri): Boolean = try {
+    context.contentResolver.takePersistableUriPermission(
+        uri,
+        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+    )
+    true
+} catch (e: SecurityException) {
+    // Some DocumentsProviders return URIs without FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
+    // which causes takePersistableUriPermission to throw. Skip the folder rather than crash.
+    Log.w("PhotoSwipe", "Could not take persistable permission for $uri", e)
+    false
+}
+
+private fun safeFolderName(context: Context, uri: Uri): String = try {
+    DocumentFile.fromTreeUri(context, uri)?.name
+        ?: uri.lastPathSegment ?: "Selected folder"
+} catch (e: Exception) {
+    Log.w("PhotoSwipe", "Could not resolve folder name for $uri", e)
+    uri.lastPathSegment ?: "Selected folder"
+}
+
 @Composable
 fun SetupScreen(onStart: (Storage) -> Unit) {
     val context = LocalContext.current
@@ -38,33 +62,19 @@ fun SetupScreen(onStart: (Storage) -> Unit) {
     val sourceLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
-        uri?.let {
-            context.contentResolver.takePersistableUriPermission(
-                it,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-            sourceUri = it
-            sourceName = DocumentFile.fromTreeUri(context, it)?.name
-                ?: it.lastPathSegment ?: "Selected folder"
+        if (uri != null && tryTakePersistablePermission(context, uri)) {
+            sourceUri = uri
+            sourceName = safeFolderName(context, uri)
         }
     }
 
     val destLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
-        uri?.let { treeUri ->
-            context.contentResolver.takePersistableUriPermission(
-                treeUri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-            val name = DocumentFile.fromTreeUri(context, treeUri)?.name
-                ?: treeUri.lastPathSegment
-                ?: "Selected folder"
-            pickingFor?.let { direction ->
-                destinations = destinations + (direction to PickedDestination(treeUri, name))
-            }
+        val direction = pickingFor
+        if (uri != null && direction != null && tryTakePersistablePermission(context, uri)) {
+            val name = safeFolderName(context, uri)
+            destinations = destinations + (direction to PickedDestination(uri, name))
         }
         pickingFor = null
     }

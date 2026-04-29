@@ -43,8 +43,19 @@ class SafStorage(
     override suspend fun loadImage(photo: PhotoItem): ImageBitmap? = withContext(Dispatchers.IO) {
         val uri = photoUris[photo.id] ?: return@withContext null
         try {
+            // Probe dimensions first, then decode subsampled to avoid OOM on 12 MP+ photos.
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
+            var sample = 1
+            while (bounds.outWidth / sample > MAX_DECODE_DIM ||
+                bounds.outHeight / sample > MAX_DECODE_DIM
+            ) {
+                sample *= 2
+            }
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             resolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                BitmapFactory.decodeStream(stream, null, opts)?.asImageBitmap()
             }
         } catch (e: Exception) {
             null
@@ -63,7 +74,7 @@ class SafStorage(
     override suspend fun undoMove(photo: PhotoItem, direction: SwipeDirection): PhotoItem? =
         withContext(Dispatchers.IO) {
             val destTreeUri = destinationUris[direction] ?: return@withContext null
-            val currentUri = findFileByName(destTreeUri, photo.name) ?: return@withContext null
+            val currentUri = photoUris[photo.id] ?: return@withContext null
             val newUri = doMove(currentUri, destTreeUri, sourceUri, photo) ?: return@withContext null
             val newId = DocumentsContract.getDocumentId(newUri)
             PhotoItem(id = newId, name = photo.name, mimeType = photo.mimeType)
@@ -98,8 +109,7 @@ class SafStorage(
         }
     }
 
-    private fun findFileByName(treeUri: Uri, name: String): Uri? {
-        val docFile = DocumentFile.fromTreeUri(context, treeUri) ?: return null
-        return docFile.listFiles().firstOrNull { it.name == name }?.uri
+    private companion object {
+        const val MAX_DECODE_DIM = 2048
     }
 }
