@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,8 +54,8 @@ private val directionColors = mapOf(
 private val directionIcons = mapOf(
     SwipeDirection.UP to Icons.Default.ArrowUpward,
     SwipeDirection.DOWN to Icons.Default.ArrowDownward,
-    SwipeDirection.LEFT to Icons.Default.ArrowBack,
-    SwipeDirection.RIGHT to Icons.Default.ArrowForward,
+    SwipeDirection.LEFT to Icons.AutoMirrored.Filled.ArrowBack,
+    SwipeDirection.RIGHT to Icons.AutoMirrored.Filled.ArrowForward,
     SwipeDirection.UP_LEFT to Icons.Default.NorthWest,
     SwipeDirection.UP_RIGHT to Icons.Default.NorthEast,
     SwipeDirection.DOWN_LEFT to Icons.Default.SouthWest,
@@ -213,7 +216,7 @@ private fun PhotoSwipeContent(
                 isActive = activeDrag == undoDirection,
                 modifier = Modifier.fillMaxSize(),
                 overlayColor = Color(0xFFB0BEC5),
-                labelIcon = Icons.Default.Undo
+                labelIcon = Icons.AutoMirrored.Filled.Undo
             )
         }
 
@@ -225,7 +228,7 @@ private fun PhotoSwipeContent(
         ) {
             IconButton(onClick = onBack) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = MaterialTheme.colorScheme.onBackground
                 )
@@ -251,7 +254,7 @@ private fun PhotoSwipeContent(
                     }
                 }) {
                     Icon(
-                        Icons.Default.Undo,
+                        Icons.AutoMirrored.Filled.Undo,
                         contentDescription = "Undo",
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -433,7 +436,7 @@ private fun DirectionOverlay(
     isActive: Boolean,
     modifier: Modifier = Modifier,
     overlayColor: Color = directionColors[direction] ?: Color.Gray,
-    labelIcon: ImageVector = directionIcons[direction] ?: Icons.Default.ArrowForward
+    labelIcon: ImageVector = directionIcons[direction] ?: Icons.AutoMirrored.Filled.ArrowForward
 ) {
     val alpha by animateFloatAsState(
         targetValue = if (isActive) 0.35f else 0f,
@@ -535,7 +538,7 @@ private fun DirectionHints(
             ) {
                 rowItems.forEach { (direction, dest) ->
                     val color = directionColors[direction] ?: Color.Gray
-                    val icon = directionIcons[direction] ?: Icons.Default.ArrowForward
+                    val icon = directionIcons[direction] ?: Icons.AutoMirrored.Filled.ArrowForward
                     HintChip(icon = icon, label = dest.name, color = color)
                 }
             }

@@ -8,9 +8,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
@@ -122,9 +122,9 @@ private fun DirectionGrid(
             Triple(SwipeDirection.UP_RIGHT, Icons.Default.NorthEast, Color(0xFF4DB6AC))
         ),
         listOf(
-            Triple(SwipeDirection.LEFT, Icons.Default.ArrowBack, Color(0xFFFFB74D)),
+            Triple(SwipeDirection.LEFT, Icons.AutoMirrored.Filled.ArrowBack, Color(0xFFFFB74D)),
             null,
-            Triple(SwipeDirection.RIGHT, Icons.Default.ArrowForward, Color(0xFFCE93D8))
+            Triple(SwipeDirection.RIGHT, Icons.AutoMirrored.Filled.ArrowForward, Color(0xFFCE93D8))
         ),
         listOf(
             Triple(SwipeDirection.DOWN_LEFT, Icons.Default.SouthWest, Color(0xFFFFD54F)),
