@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -446,21 +447,39 @@ private fun DirectionOverlay(
     val color = overlayColor
 
     Box(modifier = modifier) {
-        val brush = when (direction) {
-            SwipeDirection.LEFT -> Brush.horizontalGradient(listOf(color, Color.Transparent))
-            SwipeDirection.RIGHT -> Brush.horizontalGradient(listOf(Color.Transparent, color))
-            SwipeDirection.UP -> Brush.verticalGradient(listOf(color, Color.Transparent))
-            SwipeDirection.DOWN -> Brush.verticalGradient(listOf(Color.Transparent, color))
-            SwipeDirection.UP_LEFT -> Brush.linearGradient(listOf(color, Color.Transparent), start = Offset.Zero, end = Offset(Float.MAX_VALUE, Float.MAX_VALUE))
-            SwipeDirection.UP_RIGHT -> Brush.linearGradient(listOf(color, Color.Transparent), start = Offset(Float.MAX_VALUE, 0f), end = Offset(0f, Float.MAX_VALUE))
-            SwipeDirection.DOWN_LEFT -> Brush.linearGradient(listOf(color, Color.Transparent), start = Offset(0f, Float.MAX_VALUE), end = Offset(Float.MAX_VALUE, 0f))
-            SwipeDirection.DOWN_RIGHT -> Brush.linearGradient(listOf(color, Color.Transparent), start = Offset(Float.MAX_VALUE, Float.MAX_VALUE), end = Offset.Zero)
-        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .alpha(alpha)
-                .background(brush)
+                .drawBehind {
+                    val brush = when (direction) {
+                        SwipeDirection.LEFT -> Brush.horizontalGradient(listOf(color, Color.Transparent))
+                        SwipeDirection.RIGHT -> Brush.horizontalGradient(listOf(Color.Transparent, color))
+                        SwipeDirection.UP -> Brush.verticalGradient(listOf(color, Color.Transparent))
+                        SwipeDirection.DOWN -> Brush.verticalGradient(listOf(Color.Transparent, color))
+                        SwipeDirection.UP_LEFT -> Brush.linearGradient(
+                            listOf(color, Color.Transparent),
+                            start = Offset.Zero,
+                            end = Offset(size.width, size.height)
+                        )
+                        SwipeDirection.UP_RIGHT -> Brush.linearGradient(
+                            listOf(color, Color.Transparent),
+                            start = Offset(size.width, 0f),
+                            end = Offset(0f, size.height)
+                        )
+                        SwipeDirection.DOWN_LEFT -> Brush.linearGradient(
+                            listOf(color, Color.Transparent),
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, 0f)
+                        )
+                        SwipeDirection.DOWN_RIGHT -> Brush.linearGradient(
+                            listOf(color, Color.Transparent),
+                            start = Offset(size.width, size.height),
+                            end = Offset.Zero
+                        )
+                    }
+                    drawRect(brush)
+                }
         )
 
         val alignment = when (direction) {

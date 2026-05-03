@@ -1,6 +1,6 @@
 # Photo Swipe
 
-A Kotlin Multiplatform app for quickly sorting photos into folders using swipe gestures. Pick a source folder, assign up to four destination folders to swipe directions, then swipe through your photos one by one to move them where you want.
+A Kotlin Multiplatform app for quickly sorting photos into folders using swipe gestures. Pick a source folder, assign up to eight destination folders to swipe directions (4 cardinal + 4 diagonal), then swipe through your photos one by one to move them where you want.
 
 Targets:
 - **Android** (full app, with Storage Access Framework folder pickers)
@@ -9,7 +9,7 @@ Targets:
 ## Features
 
 - Choose any folder on your device as a source
-- Assign destination folders to Left, Right, Up, and Down swipes (assign as many or as few as you need)
+- Assign destination folders to all 8 swipe directions — Left, Right, Up, Down, and the four diagonals (Up-Left, Up-Right, Down-Left, Down-Right). Assign as many or as few as you need.
 - Photos are presented in chronological order (oldest first)
 - Visual overlay previews the destination as you drag
 - One-level undo after each move
@@ -233,7 +233,8 @@ Then open http://localhost:8000/.
 ### What the demo does
 
 - Click **Start Demo** to enter the swipe screen
-- Drag photos in 4 directions: → Keep, ← Trash, ↑ Favorites, ↓ Later
+- Drag photos in any of 8 directions (cardinals + diagonals); the demo wires up sample destinations to each
+- Each direction has its own color-coded overlay that fades in as you drag toward it
 - Swipe is animated with the same gesture/animation code the Android app uses
 - Undo button restores the previous photo with the same "fly back" entrance animation
 - "Moves" are tracked in memory only — refresh to reset
