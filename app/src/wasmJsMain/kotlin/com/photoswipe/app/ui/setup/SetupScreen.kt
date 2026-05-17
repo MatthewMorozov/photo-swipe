@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.photoswipe.app.BuildInfo
 import com.photoswipe.app.model.SwipeDirection
 import com.photoswipe.app.storage.MockFolderTemplate
 import com.photoswipe.app.storage.MockFolders
@@ -53,6 +54,7 @@ fun SetupScreen(onStart: (Storage) -> Unit) {
             val src = sourceFolder ?: return@SetupScreenScaffold
             onStart(MockStorage(source = src, destinations = destinations))
         },
+        title = "Photo Swipe v${BuildInfo.VERSION}",
         subtitle = "Web demo — pick a mock source folder and assign mock destinations to swipe directions. Photos and moves are simulated.",
         startButtonLabel = "Start Demo",
     )

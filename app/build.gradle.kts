@@ -2,6 +2,8 @@ import org.jetbrains.compose.ExperimentalComposeLibrary
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+val appVersionName = "1.0"
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.application)
@@ -28,6 +30,9 @@ kotlin {
     }
 
     sourceSets {
+        commonMain {
+            kotlin.srcDir(layout.buildDirectory.dir("generated/source/buildinfo/commonMain/kotlin"))
+        }
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
@@ -57,18 +62,32 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = appVersionName
     }
 
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")
 
+    // Release signing credentials are read from Gradle properties — set them
+    // in ~/.gradle/gradle.properties (outside the repo) as `keystore.path`,
+    // `keystore.password`, `key.alias`, `key.password`. If any are missing,
+    // assembleRelease still runs but produces an unsigned APK.
+    val keystorePath = project.findProperty("keystore.path") as String?
+    val keystorePassword = project.findProperty("keystore.password") as String?
+    val keyAliasProp = project.findProperty("key.alias") as String?
+    val keyPasswordProp = project.findProperty("key.password") as String?
+    val releaseSigningConfigured =
+        keystorePath != null && keystorePassword != null &&
+        keyAliasProp != null && keyPasswordProp != null
+
     signingConfigs {
-        create("release") {
-            storeFile = file(project.findProperty("keystore.path") as String? ?: "./keys/release.jks")
-            storePassword = project.findProperty("keystore.password") as String? ?: ""
-            keyAlias = project.findProperty("key.alias") as String? ?: "photoswipe"
-            keyPassword = project.findProperty("key.password") as String? ?: ""
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword
+                keyAlias = keyAliasProp
+                keyPassword = keyPasswordProp
+            }
         }
     }
 
@@ -80,7 +99,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
@@ -88,6 +109,26 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+}
+
+val generateBuildInfo by tasks.registering {
+    val outDir = layout.buildDirectory.dir("generated/source/buildinfo/commonMain/kotlin")
+    val versionProvider = providers.provider { appVersionName }
+    outputs.dir(outDir)
+    doLast {
+        val pkgDir = outDir.get().asFile.resolve("com/photoswipe/app")
+        pkgDir.mkdirs()
+        pkgDir.resolve("BuildInfo.kt").writeText(
+            "package com.photoswipe.app\n\n" +
+            "internal object BuildInfo {\n" +
+            "    const val VERSION: String = \"${versionProvider.get()}\"\n" +
+            "}\n"
+        )
+    }
+}
+
+tasks.matching { it.name.startsWith("compile") && it.name.contains("Kotlin") }.configureEach {
+    dependsOn(generateBuildInfo)
 }
 
 // Copy Skiko's web runtime (skiko.wasm / skiko.mjs / skiko.js) into the
